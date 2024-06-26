@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phaser Car Parking Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; }
+    </style>
+</head>
+<body>
+    <script>
+    const config = {
+        type: Phaser.AUTO,
+        width: window.innerWidth,
+        height: window.innerHeight,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 0 },
+                debug: false
+            }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    const game = new Phaser.Game(config);
+    let car;
+    let cursors;
+    let parkingSpots;
+    let parkedCars;
+    let currentLevel = 0;
+    let spaceKey;
+
+    const levels = [
+        { type: 'parallel', x: 400, y: 300, angle: 100 },
+    ];
+
+    function preload() {
+        this.load.image('car', 'car.png');
+        this.load.image('parkedCar', 'car1.png');
+        this.load.image('parkedCar2', 'car2.png');
+        this.load.image('road', 'black.png');
+    }
+
+    function create() {
+        this.add.tileSprite(0, 0, config.width, config.height, 'road').setOrigin(0, 0);
+        
+        car = this.physics.add.image(100, 100, 'car');
+        car.setCollideWorldBounds(true);
+        car.setDamping(true);
+        car.setDrag(0.98);
+        car.setMaxVelocity(200);
+        car.setScale(0.5);
+
+        car.speed = 10;
+        car.wheelBase = 80;
+        car.steeringAngle = 0;
+        car.maxSteeringAngle = Math.PI / 4;
+        car.rearWheel = new Phaser.Math.Vector2(0, 0);
+        car.frontWheel = new Phaser.Math.Vector2(0, -car.wheelBase);
+        car.direction = 0;
+
+        parkedCars = this.physics.add.group();
+        parkingSpots = this.physics.add.group();
+
+        loadLevel(this);
+
+        cursors = this.input.keyboard.createCursorKeys();
+        spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+        this.cameras.main.setBounds(0, 0, config.width, config.height);
+        this.cameras.main.startFollow(car);
+    }
+
+    function update(time, delta) {
+        const dt = delta / 1000;
+
+        if (cursors.up.isDown) {
+            car.speed = Math.min(car.speed + 100 * dt, 200);
+        } else if (cursors.down.isDown) {
+            car.speed = Math.max(car.speed - 100 * dt, -100);
+        } else if (spaceKey.isDown) {
+            car.speed *= 0.95;
+        } else {
+            car.speed *= 0.98;
+        }
+
+        if (Math.abs(car.speed) > 1) {
+            if (cursors.left.isDown) {
+                car.steeringAngle = Math.max(car.steeringAngle - Math.PI * dt, -car.maxSteeringAngle);
+            } else if (cursors.right.isDown) {
+                car.steeringAngle = Math.min(car.steeringAngle + Math.PI * dt, car.maxSteeringAngle);
+            } else {
+                car.steeringAngle *= 0.9;
+            }
+        }
+
+        if (Math.abs(car.speed) > 1) {
+            let moveX = Math.sin(car.rotation) * car.speed * dt;
+            let moveY = -Math.cos(car.rotation) * car.speed * dt;
+
+            let turnRadius = car.wheelBase / Math.sin(car.steeringAngle);
+            let angularVelocity = car.speed / turnRadius;
+
+            if (car.speed < 0) {
+                angularVelocity *= -1;
+            }
+
+            car.rotation += angularVelocity * dt;
+            car.x += moveX;
+            car.y += moveY;
+        }
+
+        car.rotation = Phaser.Math.Angle.Wrap(car.rotation);
+
+        let parkSpot = parkingSpots.getChildren()[0];
+        let parked = Phaser.Geom.Intersects.RectangleToRectangle(car.getBounds(), parkSpot.getBounds()) &&
+                    Math.abs(car.speed) < 1 &&
+                    Math.abs(Phaser.Math.Angle.Normalize(car.rotation - parkSpot.rotation)) < 3.7;
+
+        if (parked) {
+            alert('Parked!');
+            nextLevel(this);
+        }
+    }
+
+    function loadLevel(scene) {
+        parkedCars.clear(true, true);
+        parkingSpots.clear(true, true);
+
+        let level = levels[currentLevel];
+
+        let parkSpot = scene.add.rectangle(level.x, level.y, 114, 263, 0xffff00, 0.3);
+        parkSpot.setAngle(Phaser.Math.RadToDeg(level.angle));
+        parkingSpots.add(parkSpot);
+
+        let graphics = scene.add.graphics();
+
+        if (level.type === 'parallel') {
+            parkedCars.add(scene.physics.add.image(level.x - 144, level.y, 'parkedCar').setScale(0.5).setAngle(Phaser.Math.RadToDeg(level.angle)));
+            parkedCars.add(scene.physics.add.image(level.x + 154, level.y, 'parkedCar2').setScale(0.5).setAngle(Phaser.Math.RadToDeg(level.angle)));
+        }
+
+        car.setPosition(100, 100);
+        car.setRotation(0);
+        car.setVelocity(0, 0);
+    }
+
+    function nextLevel(scene) {
+        currentLevel++;
+        if (currentLevel >= levels.length) {
+            console.log('Done!');
+            currentLevel = 0;
+        }
+        loadLevel(scene);
+    }
+
+    window.addEventListener('resize', function (event) {
+        game.scale.resize(window.innerWidth, window.innerHeight);
+    }, false);
+    </script>
+</body>
+</html>
